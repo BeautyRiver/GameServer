@@ -1,9 +1,12 @@
 #pragma once
 #include <WinSock2.h>
 #include <mutex>
+#include <thread>
 #include <vector>
 #include <cstdint>
 #include "ClientSession.h"
+
+#define SERVER_PORT      9000
 
 class Server {
 public:

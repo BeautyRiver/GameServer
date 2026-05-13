@@ -14,6 +14,8 @@ enum class PacketType : uint16_t {
     ATTACK_REQ      = 7,
     ATTACK_NOTIFY   = 8,
     DISCONNECT      = 9,
+    ROOM_ENTER_REQ  = 10,
+    ROOM_ENTER_RES  = 11
 };
 
 // 공통 헤더
@@ -86,5 +88,16 @@ struct Disconnect {
     // 바디 없음
 };
 
+// 10. 방 입장 요청 (Client → Server)
+struct RoomEnterReq {
+    PacketHeader header;
+};
+
+// 11. 방 입장 응답 (Server → Client)
+struct RoomEnterRes {
+    PacketHeader header;
+    bool     success;
+    uint32_t currentPlayers;  // 현재 방 인원수
+};
 
 #pragma pack(pop)
