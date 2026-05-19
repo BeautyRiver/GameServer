@@ -1,84 +1,98 @@
-﻿#pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 #include <iostream>
+#include <algorithm>
 #include "Server.h"
 
 void Server::start(int port) {
 
-    // WSAStartup
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cout << "WSAStartup 실패" << std::endl;
+        std::cout << "[ERROR] WSAStartup failed\n";
         return;
     }
 
-    // create socket
     listenSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (listenSocket == INVALID_SOCKET) {
-        std::cout << "소켓 생성 실패" << std::endl;
+        std::cout << "[ERROR] socket() failed\n";
         WSACleanup();
         return;
     }
 
-    // bind
     sockaddr_in serverAddr{};
-    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_family      = AF_INET;
     serverAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serverAddr.sin_port = htons(port);
+    serverAddr.sin_port        = htons(port);
 
     if (bind(listenSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-        std::cout << "bind 실패" << std::endl;
+        std::cout << "[ERROR] bind() failed\n";
         closesocket(listenSocket);
         WSACleanup();
         return;
     }
 
-    // listen
     if (listen(listenSocket, SOMAXCONN) == SOCKET_ERROR) {
-        std::cout << "listen 실패" << std::endl;
+        std::cout << "[ERROR] listen() failed\n";
         closesocket(listenSocket);
         WSACleanup();
         return;
     }
 
-    std::cout << "서버 시작 - 포트: " << port << std::endl;
+    std::cout << "[INFO] Server started on port " << port << "\n";
 
-    // accept loop
     acceptLoop();
 }
 
 void Server::acceptLoop() {
     while (true) {
-        // 클라이언트 접속 대기
         SOCKET clientSocket = accept(listenSocket, nullptr, nullptr);
         if (clientSocket == INVALID_SOCKET) {
-            std::cout << "accept 실패" << std::endl;
+            std::cout << "[ERROR] accept() failed\n";
             continue;
         }
 
-        // 세션 ㅐㅅㅇ성
-        ClientSession* session = new ClientSession();
-        session->socket = clientSocket;
-        session->isLoggedIn = false;
+        ClientSession* session  = new ClientSession();
+        session->socket         = clientSocket;
+        session->server         = this;
+        session->isLoggedIn     = false;
 
-        // sessions에 추가 (mutex로 공유자원 관리)
+        size_t count;
         {
             std::lock_guard<std::mutex> lock(sessionMutex);
             sessions.push_back(session);
+            count = sessions.size();
         }
 
-        std::cout << "클라이언트 접속 - 현재 " << sessions.size() << "명" << std::endl;
+        std::cout << "[INFO] Client connected, total: " << count << "\n";
 
-        // 스레드 생성 → recvLoop 실행
         std::thread t(&ClientSession::recvLoop, session);
         t.detach();
     }
 }
 
-void Server::broadcast(const void* data, uint16_t size)
-{
+void Server::broadcast(const void* data, uint16_t size) {
+    std::lock_guard<std::mutex> lock(sessionMutex);
+    for (ClientSession* s : sessions) {
+        if (s->isLoggedIn)
+            s->sendPacket(data, size);
+    }
 }
 
-void Server::removeSession(ClientSession* session)
-{
+void Server::removeSession(ClientSession* session) {
+    if (session->socket != INVALID_SOCKET) {
+        closesocket(session->socket);
+        session->socket = INVALID_SOCKET;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(sessionMutex);
+        auto it = std::find(sessions.begin(), sessions.end(), session);
+        if (it != sessions.end())
+            sessions.erase(it);
+    }
+
+    std::cout << "[INFO] Disconnected player_" << session->player.playerID
+              << " (" << session->player.nickname << ")\n";
+
+    delete session;
 }

@@ -10,15 +10,17 @@
 
 class Server {
 public:
-    void        start(int port);   // 서버 시작
-    void        acceptLoop();      // 클라이언트 접속 대기
+    void        start(int port);
+    void        acceptLoop();
+
+    void        broadcast(const void* data, uint16_t size);
+    void        removeSession(ClientSession* session);
 
 private:
+    friend class ServerPacketHandler;
+
     SOCKET                              listenSocket;
     std::vector<ClientSession*>         sessions;
-    std::mutex                          sessionMutex;  // 동기화
+    std::mutex                          sessionMutex;
     uint32_t                            nextPlayerID = 1;
-
-    void        broadcast(const void* data, uint16_t size);  // 전체 전송
-    void        removeSession(ClientSession* session);  // 세션 제거
 };
